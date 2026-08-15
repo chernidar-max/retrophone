@@ -215,7 +215,9 @@ class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
     }
 
     fun toggleState() {
-        if (effectsFade < 0.5f || collapseProgress > 0.0f) {
+        if (isCollapsing) {
+            triggerTurnOn()
+        } else if (isFadingToStatic || effectsFade < 0.5f) {
             triggerTurnOn()
         } else {
             triggerCrtTurnOff()
