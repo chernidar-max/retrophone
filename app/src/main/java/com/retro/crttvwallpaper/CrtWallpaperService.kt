@@ -28,15 +28,9 @@ class CrtWallpaperService : WallpaperService() {
                 renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
             }
 
-            // Подвійний тап по робочому столу запускає ефект лампового схлопування в точку
             gestureDetector = GestureDetector(this@CrtWallpaperService, object : GestureDetector.SimpleOnGestureListener() {
                 override fun onDoubleTap(e: MotionEvent): Boolean {
-                    renderer?.triggerCrtTurnOff()
-                    return true
-                }
-
-                override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                    renderer?.resetState()
+                    renderer?.toggleState()
                     return true
                 }
             })
@@ -48,7 +42,7 @@ class CrtWallpaperService : WallpaperService() {
             super.onVisibilityChanged(visible)
             if (visible) {
                 glSurfaceView?.onResume()
-                renderer?.resetState()
+                renderer?.triggerTurnOn()
             } else {
                 glSurfaceView?.onPause()
             }
