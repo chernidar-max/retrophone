@@ -10,6 +10,8 @@ import android.net.Uri
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
 import android.opengl.GLUtils
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -22,10 +24,10 @@ import javax.microedition.khronos.opengles.GL10
 class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
 
     private val vertexCoords = floatArrayOf(
-        -1.0f,  1.0f, 0.0f,  // Top Left
-        -1.0f, -1.0f, 0.0f,  // Bottom Left
-         1.0f, -1.0f, 0.0f,  // Bottom Right
-         1.0f,  1.0f, 0.0f   // Top Right
+        -1.0f,  1.0f, 0.0f,
+        -1.0f, -1.0f, 0.0f,
+         1.0f, -1.0f, 0.0f,
+         1.0f,  1.0f, 0.0f
     )
 
     private val texCoords = floatArrayOf(
@@ -59,8 +61,11 @@ class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
     private var uTimeHandle = 0
     private var uResolutionHandle = 0
     private var uCollapseProgressHandle = 0
+    private var uWarmupProgressHandle = 0
+    private var uEffectsFadeHandle = 0
     private var uNoiseIntensityHandle = 0
     private var uCurvatureHandle = 0
+    private var uScanlineIntensityHandle = 0
     private var uTextureHandle = 0
     private var textureId = 0
 
@@ -68,8 +73,6 @@ class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
     private var screenWidth = 1080f
     private var screenHeight = 2400f
 
-    // Перезавантаження текстури відбувається лише в GL-потоці (onDrawFrame),
-    // тому запит ставиться у чергу прапорцем, а не викликається напряму.
     @Volatile private var textureReloadRequested = false
 
     companion object {
@@ -77,21 +80,38 @@ class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
         private const val KEY_IMAGE_URI = "background_image_uri"
     }
 
-    // Параметри анімації та ефектів
+    // Параметри ретро-ефектів
     var noiseIntensity = 0.18f
     var curvature = 0.12f
+    var scanlineIntensity = 0.12f
+
+    // Анімація схлопування в точку
     var collapseProgress = 0.0f
     private var isCollapsing = false
     private var collapseStartTime = 0L
-    private val collapseDuration = 550L // 0.55 секунди для ідеального відчуття
+    private val collapseDuration = 550L
 
-    var onCollapseComplete: (() -> Unit)? = null
+    // Анімація прогріву ламп (Warmup: шум -> картинка)
+    private var warmupProgress = 1.0f
+    private var isWarmingUp = false
+    private var warmupStartTime = 0L
+    private val warmupDuration = 1200L
+
+    // Анімація переходу в чисте статичне фото без перешкод
+    private var effectsFade = 1.0f
+    private var isFadingToStatic = false
+    private var fadeStartTime = 0L
+    private val fadeDuration = 1000L
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var autoWakeRunnable: Runnable? = null
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         GLES20.glClearColor(0.0f, 0.0f, 0.0f, 1.0f)
         initShaders()
         initTexture()
         startTime = SystemClock.uptimeMillis()
+        triggerTurnOn()
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -110,23 +130,40 @@ class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
         GLES20.glUseProgram(programId)
 
         val currentTime = (SystemClock.uptimeMillis() - startTime) / 1000.0f
-        GLES20.glUniform1f(uTimeHandle, currentTime)
-        GLES20.glUniform2f(uResolutionHandle, screenWidth, screenHeight)
-        GLES20.glUniform1f(uNoiseIntensityHandle, noiseIntensity)
-        GLES20.glUniform1f(uCurvatureHandle, curvature)
 
-        // Обробка анімації вимкнення
+        // 1. Обробка схлопування в крапку
         if (isCollapsing) {
             val elapsed = SystemClock.uptimeMillis() - collapseStartTime
             collapseProgress = (elapsed.toFloat() / collapseDuration).coerceIn(0.0f, 1.0f)
-            if (collapseProgress >= 1.0f) {
-                isCollapsing = false
-                onCollapseComplete?.invoke()
+        }
+
+        // 2. Обробка прогріву ламп
+        if (isWarmingUp) {
+            val elapsed = SystemClock.uptimeMillis() - warmupStartTime
+            if (elapsed < 400L) {
+                warmupProgress = 0.0f
+            } else {
+                warmupProgress = ((elapsed - 400L).toFloat() / (warmupDuration - 400L)).coerceIn(0.0f, 1.0f)
+                if (warmupProgress >= 1.0f) isWarmingUp = false
             }
         }
-        GLES20.glUniform1f(uCollapseProgressHandle, collapseProgress)
 
-        // Bind Texture
+        // 3. Обробка переходу в чисте фото
+        if (isFadingToStatic) {
+            val elapsed = SystemClock.uptimeMillis() - fadeStartTime
+            effectsFade = (1.0f - (elapsed.toFloat() / fadeDuration)).coerceIn(0.0f, 1.0f)
+            if (effectsFade <= 0.0f) isFadingToStatic = false
+        }
+
+        GLES20.glUniform1f(uTimeHandle, currentTime)
+        GLES20.glUniform2f(uResolutionHandle, screenWidth, screenHeight)
+        GLES20.glUniform1f(uCollapseProgressHandle, collapseProgress)
+        GLES20.glUniform1f(uWarmupProgressHandle, warmupProgress)
+        GLES20.glUniform1f(uEffectsFadeHandle, effectsFade)
+        GLES20.glUniform1f(uNoiseIntensityHandle, noiseIntensity)
+        GLES20.glUniform1f(uCurvatureHandle, curvature)
+        GLES20.glUniform1f(uScanlineIntensityHandle, scanlineIntensity)
+
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureId)
         GLES20.glUniform1i(uTextureHandle, 0)
@@ -145,15 +182,48 @@ class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
         GLES20.glDisableVertexAttribArray(texHandle)
     }
 
+    fun triggerTurnOn() {
+        autoWakeRunnable?.let { mainHandler.removeCallbacks(it) }
+        isCollapsing = false
+        collapseProgress = 0.0f
+        isFadingToStatic = false
+        effectsFade = 1.0f
+
+        isWarmingUp = true
+        warmupStartTime = SystemClock.uptimeMillis()
+        warmupProgress = 0.0f
+    }
+
     fun triggerCrtTurnOff() {
+        autoWakeRunnable?.let { mainHandler.removeCallbacks(it) }
         isCollapsing = true
         collapseStartTime = SystemClock.uptimeMillis()
         collapseProgress = 0.0f
+
+        // Через 1.8с після вимкнення плавно проявляємо чисте статичне фото без перешкод
+        autoWakeRunnable = Runnable {
+            isCollapsing = false
+            collapseProgress = 0.0f
+            warmupProgress = 1.0f
+            isWarmingUp = false
+
+            isFadingToStatic = true
+            fadeStartTime = SystemClock.uptimeMillis()
+        }.also {
+            mainHandler.postDelayed(it, 1800L)
+        }
+    }
+
+    fun toggleState() {
+        if (effectsFade < 0.5f || collapseProgress > 0.0f) {
+            triggerTurnOn()
+        } else {
+            triggerCrtTurnOff()
+        }
     }
 
     fun resetState() {
-        isCollapsing = false
-        collapseProgress = 0.0f
+        triggerTurnOn()
     }
 
     private fun initShaders() {
@@ -172,8 +242,11 @@ class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
         uTimeHandle = GLES20.glGetUniformLocation(programId, "u_Time")
         uResolutionHandle = GLES20.glGetUniformLocation(programId, "u_Resolution")
         uCollapseProgressHandle = GLES20.glGetUniformLocation(programId, "u_CollapseProgress")
+        uWarmupProgressHandle = GLES20.glGetUniformLocation(programId, "u_WarmupProgress")
+        uEffectsFadeHandle = GLES20.glGetUniformLocation(programId, "u_EffectsFade")
         uNoiseIntensityHandle = GLES20.glGetUniformLocation(programId, "u_NoiseIntensity")
         uCurvatureHandle = GLES20.glGetUniformLocation(programId, "u_Curvature")
+        uScanlineIntensityHandle = GLES20.glGetUniformLocation(programId, "u_ScanlineIntensity")
         uTextureHandle = GLES20.glGetUniformLocation(programId, "u_Texture")
     }
 
@@ -184,8 +257,6 @@ class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
         applyTexture(loadBitmapForTexture())
     }
 
-    /** Завантажує Bitmap для текстури: спершу пробує збережене фото користувача,
-     *  якщо його нема або не вдалось прочитати — falls back на процедурний плейсхолдер. */
     private fun loadBitmapForTexture(): Bitmap {
         val savedUriString = context
             .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -199,13 +270,12 @@ class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
                     if (bmp != null) return bmp
                 }
             } catch (e: Exception) {
-                // Файл видалено, доступ відкликано тощо — тихо падаємо на плейсхолдер.
+                // Ignore fallback to default
             }
         }
         return createDefaultSteampunkTexture()
     }
 
-    /** Заливає готовий Bitmap у вже створену GL-текстуру. Викликати лише з GL-потоку. */
     private fun applyTexture(bitmap: Bitmap) {
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureId)
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
@@ -216,10 +286,6 @@ class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
         bitmap.recycle()
     }
 
-    /** Викликати з MainActivity після того, як користувач обрав нове фото.
-     *  Uri параметр не використовується напряму — він вже має бути збережений
-     *  в SharedPreferences (KEY_IMAGE_URI) на момент виклику; тут лише ставимо прапорець
-     *  перечитування, яке безпечно виконається в GL-потоці на наступному кадрі. */
     fun reloadTexture(uri: Uri) {
         textureReloadRequested = true
     }
@@ -230,13 +296,11 @@ class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
         val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
-        // Темний вінтажний фон (бронзово-металевий відтінок)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         paint.color = Color.parseColor("#15110E")
         canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), paint)
 
-        // Ретро тестова сітка телевізора / стімпанк логотип
-        paint.color = Color.parseColor("#B87333") // Мідний
+        paint.color = Color.parseColor("#B87333")
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = 6f
         canvas.drawCircle(w / 2f, h / 2f, 320f, paint)
@@ -246,7 +310,6 @@ class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
         canvas.drawLine(w / 2f - 400f, h / 2f, w / 2f + 400f, h / 2f, paint)
         canvas.drawLine(w / 2f, h / 2f - 400f, w / 2f, h / 2f + 400f, paint)
 
-        // Текст вінтажного телеканалу
         paint.style = Paint.Style.FILL
         paint.color = Color.parseColor("#DAA520")
         paint.textSize = 64f
