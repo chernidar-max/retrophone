@@ -2,8 +2,8 @@ package com.retro.crttvwallpaper
 
 import android.content.Context
 import android.opengl.GLSurfaceView
+import android.os.SystemClock
 import android.service.wallpaper.WallpaperService
-import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 
@@ -16,7 +16,13 @@ class CrtWallpaperService : WallpaperService() {
     inner class CrtEngine : Engine() {
         private var glSurfaceView: WallpaperGLSurfaceView? = null
         private var renderer: CrtRenderer? = null
-        private lateinit var gestureDetector: GestureDetector
+        
+        // Надійний власний лічильник подвійного тапу (працює завжди на всіх лаунчерах Android 15)
+        private var lastTapTime = 0L
+        private var lastTapX = 0f
+        private var lastTapY = 0f
+        private val doubleTapTimeout = 400L
+        private val doubleTapSlopSquare = 120f * 120f
 
         override fun onCreate(surfaceHolder: SurfaceHolder) {
             super.onCreate(surfaceHolder)
@@ -28,19 +34,6 @@ class CrtWallpaperService : WallpaperService() {
                 renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
             }
 
-            // Подвійний тап по робочому столу запускає ефект лампового схлопування в точку
-            gestureDetector = GestureDetector(this@CrtWallpaperService, object : GestureDetector.SimpleOnGestureListener() {
-                override fun onDoubleTap(e: MotionEvent): Boolean {
-                    renderer?.triggerCrtTurnOff()
-                    return true
-                }
-
-                override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                    renderer?.resetState()
-                    return true
-                }
-            })
-
             setTouchEventsEnabled(true)
         }
 
@@ -48,7 +41,7 @@ class CrtWallpaperService : WallpaperService() {
             super.onVisibilityChanged(visible)
             if (visible) {
                 glSurfaceView?.onResume()
-                renderer?.resetState()
+                renderer?.triggerTurnOn()
             } else {
                 glSurfaceView?.onPause()
             }
@@ -56,7 +49,22 @@ class CrtWallpaperService : WallpaperService() {
 
         override fun onTouchEvent(event: MotionEvent) {
             super.onTouchEvent(event)
-            gestureDetector.onTouchEvent(event)
+            if (event.action == MotionEvent.ACTION_DOWN) {
+                val now = SystemClock.uptimeMillis()
+                val dx = event.x - lastTapX
+                val dy = event.y - lastTapY
+                val distSq = dx * dx + dy * dy
+
+                if (now - lastTapTime <= doubleTapTimeout && distSq <= doubleTapSlopSquare) {
+                    // Подвійний тап успішно розпізнано
+                    renderer?.toggleState()
+                    lastTapTime = 0L // Скидаємо, щоб не спрацьовувало тричі
+                } else {
+                    lastTapTime = now
+                    lastTapX = event.x
+                    lastTapY = event.y
+                }
+            }
         }
 
         override fun onDestroy() {
