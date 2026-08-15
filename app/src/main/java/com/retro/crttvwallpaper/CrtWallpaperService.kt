@@ -4,6 +4,7 @@ import android.content.Context
 import android.opengl.GLSurfaceView
 import android.os.SystemClock
 import android.service.wallpaper.WallpaperService
+import android.util.Log
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 
@@ -42,6 +43,11 @@ class CrtWallpaperService : WallpaperService() {
             if (visible) {
                 glSurfaceView?.onResume()
                 renderer?.triggerTurnOn()
+                // На деяких прошивках система перепідключається до сервісу після
+                // розблокування екрана, і прапорець дозволу на тач-події може
+                // "забутись" — тому підтверджуємо його при кожному показі шпалер.
+                setTouchEventsEnabled(true)
+                lastTapTime = 0L
             } else {
                 glSurfaceView?.onPause()
             }
@@ -49,21 +55,25 @@ class CrtWallpaperService : WallpaperService() {
 
         override fun onTouchEvent(event: MotionEvent) {
             super.onTouchEvent(event)
-            if (event.action == MotionEvent.ACTION_DOWN) {
-                val now = SystemClock.uptimeMillis()
-                val dx = event.x - lastTapX
-                val dy = event.y - lastTapY
-                val distSq = dx * dx + dy * dy
+            try {
+                if (event.action == MotionEvent.ACTION_DOWN) {
+                    val now = SystemClock.uptimeMillis()
+                    val dx = event.x - lastTapX
+                    val dy = event.y - lastTapY
+                    val distSq = dx * dx + dy * dy
 
-                if (now - lastTapTime <= doubleTapTimeout && distSq <= doubleTapSlopSquare) {
-                    // Подвійний тап успішно розпізнано
-                    renderer?.toggleState()
-                    lastTapTime = 0L // Скидаємо, щоб не спрацьовувало тричі
-                } else {
-                    lastTapTime = now
-                    lastTapX = event.x
-                    lastTapY = event.y
+                    if (now - lastTapTime <= doubleTapTimeout && distSq <= doubleTapSlopSquare) {
+                        // Подвійний тап успішно розпізнано
+                        renderer?.toggleState()
+                        lastTapTime = 0L // Скидаємо, щоб не спрацьовувало тричі
+                    } else {
+                        lastTapTime = now
+                        lastTapX = event.x
+                        lastTapY = event.y
+                    }
                 }
+            } catch (e: Exception) {
+                Log.e("CrtWallpaperService", "Помилка обробки дотику", e)
             }
         }
 
