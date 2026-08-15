@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.CrtTvWallpaper" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#B87333</item>
+        <item name="colorPrimaryVariant">#8B5A2B</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="android:statusBarColor">#0A0806</item>
+        <item name="android:navigationBarColor">#16120F</item>
+    </style>
+</resources>
