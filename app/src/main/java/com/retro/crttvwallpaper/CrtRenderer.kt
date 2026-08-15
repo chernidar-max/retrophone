@@ -2,9 +2,11 @@ package com.retro.crttvwallpaper
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.net.Uri
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
 import android.opengl.GLUtils
@@ -66,6 +68,15 @@ class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
     private var screenWidth = 1080f
     private var screenHeight = 2400f
 
+    // Перезавантаження текстури відбувається лише в GL-потоці (onDrawFrame),
+    // тому запит ставиться у чергу прапорцем, а не викликається напряму.
+    @Volatile private var textureReloadRequested = false
+
+    companion object {
+        private const val PREFS_NAME = "crt_wallpaper_prefs"
+        private const val KEY_IMAGE_URI = "background_image_uri"
+    }
+
     // Параметри анімації та ефектів
     var noiseIntensity = 0.18f
     var curvature = 0.12f
@@ -90,6 +101,11 @@ class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
     }
 
     override fun onDrawFrame(gl: GL10?) {
+        if (textureReloadRequested) {
+            textureReloadRequested = false
+            applyTexture(loadBitmapForTexture())
+        }
+
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
         GLES20.glUseProgram(programId)
 
@@ -165,17 +181,47 @@ class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
         val textures = IntArray(1)
         GLES20.glGenTextures(1, textures, 0)
         textureId = textures[0]
+        applyTexture(loadBitmapForTexture())
+    }
 
-        val bitmap = createDefaultSteampunkTexture()
+    /** Завантажує Bitmap для текстури: спершу пробує збережене фото користувача,
+     *  якщо його нема або не вдалось прочитати — falls back на процедурний плейсхолдер. */
+    private fun loadBitmapForTexture(): Bitmap {
+        val savedUriString = context
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_IMAGE_URI, null)
 
+        if (savedUriString != null) {
+            try {
+                val uri = Uri.parse(savedUriString)
+                context.contentResolver.openInputStream(uri)?.use { stream ->
+                    val bmp = BitmapFactory.decodeStream(stream)
+                    if (bmp != null) return bmp
+                }
+            } catch (e: Exception) {
+                // Файл видалено, доступ відкликано тощо — тихо падаємо на плейсхолдер.
+            }
+        }
+        return createDefaultSteampunkTexture()
+    }
+
+    /** Заливає готовий Bitmap у вже створену GL-текстуру. Викликати лише з GL-потоку. */
+    private fun applyTexture(bitmap: Bitmap) {
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureId)
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
-
         GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
         bitmap.recycle()
+    }
+
+    /** Викликати з MainActivity після того, як користувач обрав нове фото.
+     *  Uri параметр не використовується напряму — він вже має бути збережений
+     *  в SharedPreferences (KEY_IMAGE_URI) на момент виклику; тут лише ставимо прапорець
+     *  перечитування, яке безпечно виконається в GL-потоці на наступному кадрі. */
+    fun reloadTexture(uri: Uri) {
+        textureReloadRequested = true
     }
 
     private fun createDefaultSteampunkTexture(): Bitmap {

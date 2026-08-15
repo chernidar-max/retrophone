@@ -87,6 +87,15 @@
         </LinearLayout>
 
         <Button
+            android:id="@+id/btnPickImage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:backgroundTint="#3E4A2E"
+            android:text="Обрати фото фону 🖼"
+            android:textColor="#FFFFFF" />
+
+        <Button
             android:id="@+id/btnApplyWallpaper"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
