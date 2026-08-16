@@ -86,21 +86,25 @@ class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
     var scanlineIntensity = 0.12f
 
     // Анімація схлопування в точку
-    var collapseProgress = 0.0f
-    private var isCollapsing = false
-    private var collapseStartTime = 0L
+    // @Volatile — поле читає/пише і GL-потік (onDrawFrame), і головний потік
+    // (toggleState/triggerTurnOn з тач-подій та onVisibilityChanged). Без цього
+    // JVM не гарантує видимість змін між потоками, і головний потік може ухвалювати
+    // рішення на основі застарілого значення.
+    @Volatile var collapseProgress = 0.0f
+    @Volatile private var isCollapsing = false
+    @Volatile private var collapseStartTime = 0L
     private val collapseDuration = 550L
 
     // Анімація прогріву ламп (Warmup: шум -> картинка)
-    private var warmupProgress = 1.0f
-    private var isWarmingUp = false
-    private var warmupStartTime = 0L
+    @Volatile private var warmupProgress = 1.0f
+    @Volatile private var isWarmingUp = false
+    @Volatile private var warmupStartTime = 0L
     private val warmupDuration = 1200L
 
     // Анімація переходу в чисте статичне фото без перешкод
-    private var effectsFade = 1.0f
-    private var isFadingToStatic = false
-    private var fadeStartTime = 0L
+    @Volatile private var effectsFade = 1.0f
+    @Volatile private var isFadingToStatic = false
+    @Volatile private var fadeStartTime = 0L
     private val fadeDuration = 1000L
 
     private val mainHandler = Handler(Looper.getMainLooper())
