@@ -6,7 +6,6 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.net.Uri
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
 import android.opengl.GLUtils
@@ -14,6 +13,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -77,7 +77,7 @@ class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
 
     companion object {
         private const val PREFS_NAME = "crt_wallpaper_prefs"
-        private const val KEY_IMAGE_URI = "background_image_uri"
+        private const val KEY_IMAGE_PATH = "background_image_path"
     }
 
     // Параметри ретро-ефектів
@@ -277,15 +277,15 @@ class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
     fun loadCurrentBackgroundBitmap(): Bitmap = loadBitmapForTexture()
 
     private fun loadBitmapForTexture(): Bitmap {
-        val savedUriString = context
+        val savedPath = context
             .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getString(KEY_IMAGE_URI, null)
+            .getString(KEY_IMAGE_PATH, null)
 
-        if (savedUriString != null) {
+        if (savedPath != null) {
             try {
-                val uri = Uri.parse(savedUriString)
-                context.contentResolver.openInputStream(uri)?.use { stream ->
-                    val bmp = BitmapFactory.decodeStream(stream)
+                val file = File(savedPath)
+                if (file.exists()) {
+                    val bmp = BitmapFactory.decodeFile(savedPath)
                     if (bmp != null) return bmp
                 }
             } catch (e: Exception) {
@@ -305,7 +305,7 @@ class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
         bitmap.recycle()
     }
 
-    fun reloadTexture(uri: Uri) {
+    fun reloadTexture() {
         textureReloadRequested = true
     }
 

@@ -13,6 +13,8 @@ import android.widget.SeekBar
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import java.io.File
+import java.io.IOException
 
 class MainActivity : AppCompatActivity() {
 
@@ -27,7 +29,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         const val PREFS_NAME = "crt_wallpaper_prefs"
-        const val KEY_IMAGE_URI = "background_image_uri"
+        const val KEY_IMAGE_PATH = "background_image_path"
         const val KEY_POWER_ON = "power_on"
     }
 
@@ -35,21 +37,32 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
-            try {
-                // Постійний доступ до файлу — потрібен, бо шпалери працюють
-                // в окремому сервісі і можуть читати Uri навіть після ребута.
-                contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-                getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
-                    .putString(KEY_IMAGE_URI, uri.toString())
-                    .apply()
-                renderer.reloadTexture(uri)
-                Toast.makeText(this, "Фон оновлено", Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                Toast.makeText(this, "Не вдалося застосувати фото: ${e.message}", Toast.LENGTH_LONG).show()
-            }
+            // Копіюємо фото у приватне сховище застосунку (filesDir) одразу при виборі.
+            // Це важливо: тримати посилання на зовнішній content:// URI ненадійно —
+            // на деяких прошивках (напр. HyperOS) дозвіл на читання може "загубитись"
+            // навіть після takePersistableUriPermission, і читання пізніше падає з
+            // SecurityException. Власний файл у filesDir завжди доступний застосунку.
+            Thread {
+                try {
+                    val destFile = File(filesDir, "background_image.jpg")
+                    contentResolver.openInputStream(uri)?.use { input ->
+                        destFile.outputStream().use { output -> input.copyTo(output) }
+                    } ?: throw IOException("Не вдалося відкрити обране зображення")
+
+                    getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
+                        .putString(KEY_IMAGE_PATH, destFile.absolutePath)
+                        .apply()
+
+                    runOnUiThread {
+                        renderer.reloadTexture()
+                        Toast.makeText(this, "Фон оновлено", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    runOnUiThread {
+                        Toast.makeText(this, "Не вдалося застосувати фото: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }.start()
         }
     }
 
