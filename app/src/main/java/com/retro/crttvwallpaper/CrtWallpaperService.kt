@@ -7,6 +7,7 @@ import android.service.wallpaper.WallpaperService
 import android.util.Log
 import android.view.MotionEvent
 import android.view.SurfaceHolder
+import android.widget.Toast
 
 class CrtWallpaperService : WallpaperService() {
 
@@ -61,6 +62,11 @@ class CrtWallpaperService : WallpaperService() {
             super.onTouchEvent(event)
             try {
                 if (event.action == MotionEvent.ACTION_DOWN) {
+                    // ТИМЧАСОВА ДІАГНОСТИКА: показуємо тост на КОЖЕН дотик (не лише подвійний),
+                    // щоб зʼясувати, чи взагалі долітають тач-події до цього методу після
+                    // розблокування екрана. Прибрати після діагностики.
+                    Toast.makeText(this@CrtWallpaperService, "TAP отримано ✓", Toast.LENGTH_SHORT).show()
+
                     val now = SystemClock.uptimeMillis()
                     val dx = event.x - lastTapX
                     val dy = event.y - lastTapY
