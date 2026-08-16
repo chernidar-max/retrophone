@@ -110,15 +110,6 @@ class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var autoWakeRunnable: Runnable? = null
 
-    // ТИМЧАСОВА ДІАГНОСТИКА: час (uptimeMillis), до якого треба малювати яскравий
-    // спалах замість звичайного кадру — підтверджує, що дотик реально долетів до
-    // цього рендерера, не залежно від Looper/потоків. Прибрати після діагностики.
-    @Volatile private var debugFlashUntil = 0L
-
-    fun flashDebug() {
-        debugFlashUntil = SystemClock.uptimeMillis() + 300L
-    }
-
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         GLES20.glClearColor(0.0f, 0.0f, 0.0f, 1.0f)
         initShaders()
@@ -137,14 +128,6 @@ class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
         if (textureReloadRequested) {
             textureReloadRequested = false
             applyTexture(loadBitmapForTexture())
-        }
-
-        // ТИМЧАСОВА ДІАГНОСТИКА: під час спалаху малюємо суцільний рожевий кадр
-        // і пропускаємо звичайний рендер — щоб спалах реально було видно.
-        if (SystemClock.uptimeMillis() < debugFlashUntil) {
-            GLES20.glClearColor(1.0f, 0.0f, 1.0f, 1.0f)
-            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
-            return
         }
 
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
@@ -279,6 +262,11 @@ class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
         textureId = textures[0]
         applyTexture(loadBitmapForTexture())
     }
+
+    /** Публічний доступ для MainActivity: коли Power вимикається, це саме зображення
+     *  (обране користувачем фото або заглушка за замовчуванням) встановлюється
+     *  як звичайне статичне системне тло замість живих шпалер. */
+    fun loadCurrentBackgroundBitmap(): Bitmap = loadBitmapForTexture()
 
     private fun loadBitmapForTexture(): Bitmap {
         val savedUriString = context

@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.opengl.GLSurfaceView
 import android.os.Bundle
+import android.view.View
 import android.widget.Button
 import android.widget.SeekBar
 import android.widget.Toast
@@ -16,10 +17,15 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var glSurfaceView: GLSurfaceView
     private lateinit var renderer: CrtRenderer
+    private lateinit var btnPower: Button
+    private lateinit var menuOverlay: View
+
+    private var isPowerOn = true
 
     companion object {
         const val PREFS_NAME = "crt_wallpaper_prefs"
         const val KEY_IMAGE_URI = "background_image_uri"
+        const val KEY_POWER_ON = "power_on"
     }
 
     private val pickImageLauncher = registerForActivityResult(
@@ -48,41 +54,51 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        isPowerOn = prefs.getBoolean(KEY_POWER_ON, true)
+
         glSurfaceView = findViewById(R.id.glSurfacePreview)
         renderer = CrtRenderer(this)
+        btnPower = findViewById(R.id.btnPower)
+        menuOverlay = findViewById(R.id.menuOverlay)
 
         glSurfaceView.setEGLContextClientVersion(2)
         glSurfaceView.setRenderer(renderer)
         glSurfaceView.renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
 
-        // Тестова кнопка вимкнення кінескопа (схлопування в точку)
-        findViewById<Button>(R.id.btnTestTurnOff).setOnClickListener {
-            renderer.triggerCrtTurnOff()
+        updatePowerButtonLabel()
+
+        // Головний перемикач: Вкл — живі шпалери з ефектами, Викл — звичайне
+        // статичне фото на робочому столі (без ефектів і без live wallpaper).
+        btnPower.setOnClickListener {
+            if (isPowerOn) {
+                turnPowerOff()
+            } else {
+                turnPowerOn()
+            }
         }
 
-        // Кнопка увімкнення назад
-        findViewById<Button>(R.id.btnTurnOn).setOnClickListener {
-            renderer.resetState()
+        // Меню налаштувань — виводиться прямо на "екрані" телевізора
+        findViewById<Button>(R.id.btnMenu).setOnClickListener {
+            menuOverlay.visibility = if (menuOverlay.visibility == View.VISIBLE) View.GONE else View.VISIBLE
         }
+        findViewById<Button>(R.id.btnCloseMenu).setOnClickListener {
+            menuOverlay.visibility = View.GONE
+        }
+
+        // Декоративні клавіші — поки що нефункціональні
+        findViewById<Button>(R.id.btnChDown).setOnClickListener { }
+        findViewById<Button>(R.id.btnChUp).setOnClickListener { }
 
         // Кнопка вибору власного фото як фону для ефекту
         findViewById<Button>(R.id.btnPickImage).setOnClickListener {
             pickImageLauncher.launch(arrayOf("image/*"))
         }
 
-        // Кнопка встановлення як шпалери Android
+        // Ручне перевстановлення живих шпалер (на випадок, якщо системний
+        // діалог після Power-Вкл не пройшов сам по собі)
         findViewById<Button>(R.id.btnApplyWallpaper).setOnClickListener {
-            val intent = Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
-                putExtra(
-                    WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
-                    ComponentName(this@MainActivity, CrtWallpaperService::class.java)
-                )
-            }
-            try {
-                startActivity(intent)
-            } catch (e: Exception) {
-                Toast.makeText(this, "Встановіть шпалери через меню налаштувань екрана", Toast.LENGTH_LONG).show()
-            }
+            launchLiveWallpaperIntent()
         }
 
         // Повзунок шуму / перешкод
@@ -108,6 +124,72 @@ class MainActivity : AppCompatActivity() {
                 override fun onStopTrackingTouch(sb: SeekBar?) {}
             })
         }
+
+        // Відображаємо в превʼю стан, що відповідає збереженому Power-стану
+        if (!isPowerOn) {
+            renderer.triggerCrtTurnOff()
+        }
+    }
+
+    private fun turnPowerOn() {
+        isPowerOn = true
+        savePowerState(true)
+        updatePowerButtonLabel()
+        renderer.triggerTurnOn()
+        launchLiveWallpaperIntent()
+        Toast.makeText(this, "Підтвердіть встановлення на наступному екрані", Toast.LENGTH_LONG).show()
+    }
+
+    private fun turnPowerOff() {
+        isPowerOn = false
+        savePowerState(false)
+        updatePowerButtonLabel()
+        renderer.triggerCrtTurnOff()
+        applyStaticWallpaperInBackground()
+    }
+
+    private fun updatePowerButtonLabel() {
+        btnPower.text = if (isPowerOn) "⏻ УВІМК" else "⏻ ВИМК"
+    }
+
+    private fun savePowerState(on: Boolean) {
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
+            .putBoolean(KEY_POWER_ON, on)
+            .apply()
+    }
+
+    private fun launchLiveWallpaperIntent() {
+        val intent = Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
+            putExtra(
+                WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
+                ComponentName(this@MainActivity, CrtWallpaperService::class.java)
+            )
+        }
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Встановіть шпалери через меню налаштувань екрана", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /** "Викл" повністю замінює системні шпалери на звичайне статичне фото —
+     *  той самий кадр, що використовується як текстура ефекту. Це не потребує
+     *  системного діалогу підтвердження (на відміну від живих шпалер) і працює
+     *  надійно незалежно від особливостей лаунчера. */
+    private fun applyStaticWallpaperInBackground() {
+        Thread {
+            try {
+                val bitmap = renderer.loadCurrentBackgroundBitmap()
+                WallpaperManager.getInstance(this).setBitmap(bitmap)
+                runOnUiThread {
+                    Toast.makeText(this, "Статичне фото встановлено на робочий стіл", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    Toast.makeText(this, "Не вдалося встановити фото: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
     }
 
     override fun onResume() {
