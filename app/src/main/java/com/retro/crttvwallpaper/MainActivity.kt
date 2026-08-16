@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.opengl.GLSurfaceView
 import android.os.Bundle
+import android.util.TypedValue
 import android.view.View
 import android.widget.Button
 import android.widget.SeekBar
@@ -17,10 +18,12 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var glSurfaceView: GLSurfaceView
     private lateinit var renderer: CrtRenderer
-    private lateinit var btnPower: Button
+    private lateinit var switchPowerLever: View
+    private lateinit var switchMenuLever: View
     private lateinit var menuOverlay: View
 
     private var isPowerOn = true
+    private var isMenuOpen = false
 
     companion object {
         const val PREFS_NAME = "crt_wallpaper_prefs"
@@ -59,36 +62,38 @@ class MainActivity : AppCompatActivity() {
 
         glSurfaceView = findViewById(R.id.glSurfacePreview)
         renderer = CrtRenderer(this)
-        btnPower = findViewById(R.id.btnPower)
+        switchPowerLever = findViewById(R.id.switchPowerLever)
+        switchMenuLever = findViewById(R.id.switchMenuLever)
         menuOverlay = findViewById(R.id.menuOverlay)
 
         glSurfaceView.setEGLContextClientVersion(2)
         glSurfaceView.setRenderer(renderer)
         glSurfaceView.renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
 
-        updatePowerButtonLabel()
+        updatePowerSwitchVisual(animate = false)
 
         // Головний перемикач: Вкл — живі шпалери з ефектами, Викл — звичайне
         // статичне фото на робочому столі (без ефектів і без live wallpaper).
-        btnPower.setOnClickListener {
-            if (isPowerOn) {
-                turnPowerOff()
-            } else {
-                turnPowerOn()
-            }
+        findViewById<View>(R.id.switchPowerTrack).setOnClickListener {
+            if (isPowerOn) turnPowerOff() else turnPowerOn()
         }
 
-        // Меню налаштувань — виводиться прямо на "екрані" телевізора
-        findViewById<Button>(R.id.btnMenu).setOnClickListener {
-            menuOverlay.visibility = if (menuOverlay.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        // Тумблер меню — виводить налаштування прямо на "екрані" телевізора
+        findViewById<View>(R.id.switchMenuTrack).setOnClickListener {
+            isMenuOpen = !isMenuOpen
+            menuOverlay.visibility = if (isMenuOpen) View.VISIBLE else View.GONE
+            animateSwitchLever(switchMenuLever, isMenuOpen)
         }
         findViewById<Button>(R.id.btnCloseMenu).setOnClickListener {
+            isMenuOpen = false
             menuOverlay.visibility = View.GONE
+            animateSwitchLever(switchMenuLever, false)
         }
 
-        // Декоративні клавіші — поки що нефункціональні
-        findViewById<Button>(R.id.btnChDown).setOnClickListener { }
-        findViewById<Button>(R.id.btnChUp).setOnClickListener { }
+        // Декоративні ручки — поки що нефункціональні, лише тактильний поворот
+        setupDecorativeKnob(R.id.knobChannel)
+        setupDecorativeKnob(R.id.knobVolume)
+        setupDecorativeKnob(R.id.knobBrightness)
 
         // Кнопка вибору власного фото як фону для ефекту
         findViewById<Button>(R.id.btnPickImage).setOnClickListener {
@@ -134,7 +139,7 @@ class MainActivity : AppCompatActivity() {
     private fun turnPowerOn() {
         isPowerOn = true
         savePowerState(true)
-        updatePowerButtonLabel()
+        updatePowerSwitchVisual(animate = true)
         renderer.triggerTurnOn()
         launchLiveWallpaperIntent()
         Toast.makeText(this, "Підтвердіть встановлення на наступному екрані", Toast.LENGTH_LONG).show()
@@ -143,13 +148,44 @@ class MainActivity : AppCompatActivity() {
     private fun turnPowerOff() {
         isPowerOn = false
         savePowerState(false)
-        updatePowerButtonLabel()
+        updatePowerSwitchVisual(animate = true)
         renderer.triggerCrtTurnOff()
         applyStaticWallpaperInBackground()
     }
 
-    private fun updatePowerButtonLabel() {
-        btnPower.text = if (isPowerOn) "⏻ УВІМК" else "⏻ ВИМК"
+    /** Анімує важіль тумблера вгору/вниз і перемикає колір (як фізичний rocker-switch). */
+    private fun animateSwitchLever(lever: View, on: Boolean) {
+        val dp = { v: Float -> TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, resources.displayMetrics) }
+        val targetTranslationY = if (on) -dp(38f) else 0f
+        lever.animate()
+            .translationY(targetTranslationY)
+            .setDuration(180)
+            .withEndAction {
+                lever.setBackgroundResource(if (on) R.drawable.switch_lever_on_bg else R.drawable.switch_lever_off_bg)
+            }
+            .start()
+    }
+
+    private fun updatePowerSwitchVisual(animate: Boolean) {
+        if (animate) {
+            animateSwitchLever(switchPowerLever, isPowerOn)
+        } else {
+            val dp = { v: Float -> TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, resources.displayMetrics) }
+            switchPowerLever.translationY = if (isPowerOn) -dp(38f) else 0f
+            switchPowerLever.setBackgroundResource(
+                if (isPowerOn) R.drawable.switch_lever_on_bg else R.drawable.switch_lever_off_bg
+            )
+        }
+    }
+
+    /** Декоративна ручка настройки: обертається на клік, нічого не вмикає. */
+    private fun setupDecorativeKnob(viewId: Int) {
+        val knob = findViewById<View>(viewId)
+        var rotation = 0f
+        knob.setOnClickListener {
+            rotation += 36f
+            knob.animate().rotation(rotation).setDuration(120).start()
+        }
     }
 
     private fun savePowerState(on: Boolean) {

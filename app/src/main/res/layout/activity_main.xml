@@ -12,23 +12,23 @@
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:background="@drawable/tv_chassis_bg"
-        android:padding="16dp"
+        android:padding="18dp"
         app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toTopOf="@id/buttonRow">
+        app:layout_constraintEnd_toEndOf="parent">
 
-        <!-- Екран кінескопа -->
+        <!-- Квадратний згладжений екран кінескопа — у верхній половині корпусу -->
         <FrameLayout
             android:id="@+id/screenFrame"
             android:layout_width="0dp"
             android:layout_height="0dp"
-            android:background="#000000"
+            android:background="@drawable/tv_screen_frame_bg"
+            android:clipToOutline="true"
             app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintDimensionRatio="3:4">
+            app:layout_constraintDimensionRatio="1:1">
 
             <android.opengl.GLSurfaceView
                 android:id="@+id/glSurfacePreview"
@@ -119,63 +119,167 @@
                 </LinearLayout>
             </ScrollView>
         </FrameLayout>
+
+        <!-- Панель керування: фізичні тумблери + декоративні ручки -->
+        <LinearLayout
+            android:id="@+id/controlDeck"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:orientation="vertical"
+            android:gravity="center"
+            app:layout_constraintTop_toBottomOf="@id/screenFrame"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <!-- Ряд тумблерів: Живлення (функціональний), Меню (функціональний) -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:layout_marginBottom="24dp">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:layout_marginEnd="40dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="ЖИВЛЕННЯ"
+                        android:textColor="#8A8378"
+                        android:textSize="9sp"
+                        android:letterSpacing="0.1"
+                        android:layout_marginBottom="8dp" />
+
+                    <FrameLayout
+                        android:id="@+id/switchPowerTrack"
+                        android:layout_width="52dp"
+                        android:layout_height="88dp"
+                        android:background="@drawable/switch_track_bg">
+
+                        <View
+                            android:id="@+id/switchPowerLever"
+                            android:layout_width="40dp"
+                            android:layout_height="38dp"
+                            android:layout_marginStart="6dp"
+                            android:layout_marginTop="6dp"
+                            android:background="@drawable/switch_lever_on_bg" />
+                    </FrameLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="МЕНЮ"
+                        android:textColor="#8A8378"
+                        android:textSize="9sp"
+                        android:letterSpacing="0.1"
+                        android:layout_marginBottom="8dp" />
+
+                    <FrameLayout
+                        android:id="@+id/switchMenuTrack"
+                        android:layout_width="52dp"
+                        android:layout_height="88dp"
+                        android:background="@drawable/switch_track_bg">
+
+                        <View
+                            android:id="@+id/switchMenuLever"
+                            android:layout_width="40dp"
+                            android:layout_height="38dp"
+                            android:layout_marginStart="6dp"
+                            android:layout_marginTop="44dp"
+                            android:background="@drawable/switch_lever_off_bg" />
+                    </FrameLayout>
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Ряд ручок: Канал / Гучність / Яскравість — декоративні -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:layout_marginEnd="28dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="КАНАЛ"
+                        android:textColor="#6B6156"
+                        android:textSize="9sp"
+                        android:letterSpacing="0.1"
+                        android:layout_marginBottom="8dp" />
+
+                    <View
+                        android:id="@+id/knobChannel"
+                        android:layout_width="54dp"
+                        android:layout_height="54dp"
+                        android:background="@drawable/knob_bg" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:layout_marginEnd="28dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="ГУЧНІСТЬ"
+                        android:textColor="#6B6156"
+                        android:textSize="9sp"
+                        android:letterSpacing="0.1"
+                        android:layout_marginBottom="8dp" />
+
+                    <View
+                        android:id="@+id/knobVolume"
+                        android:layout_width="54dp"
+                        android:layout_height="54dp"
+                        android:background="@drawable/knob_bg" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="ЯСКРАВІСТЬ"
+                        android:textColor="#6B6156"
+                        android:textSize="9sp"
+                        android:letterSpacing="0.1"
+                        android:layout_marginBottom="8dp" />
+
+                    <View
+                        android:id="@+id/knobBrightness"
+                        android:layout_width="54dp"
+                        android:layout_height="54dp"
+                        android:background="@drawable/knob_bg" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
-
-    <!-- Панель керування телевізором -->
-    <LinearLayout
-        android:id="@+id/buttonRow"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingTop="16dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
-
-        <Button
-            android:id="@+id/btnChDown"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_marginEnd="6dp"
-            android:backgroundTint="#3A3530"
-            android:text="CH −"
-            android:textColor="#8A8378"
-            android:textSize="12sp" />
-
-        <Button
-            android:id="@+id/btnPower"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1.6"
-            android:layout_marginEnd="6dp"
-            android:backgroundTint="#8B2500"
-            android:text="⏻ УВІМК"
-            android:textColor="#FFFFFF"
-            android:textStyle="bold" />
-
-        <Button
-            android:id="@+id/btnMenu"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1.2"
-            android:layout_marginEnd="6dp"
-            android:backgroundTint="#3A3530"
-            android:text="☰ Меню"
-            android:textColor="#E0C097"
-            android:textSize="12sp" />
-
-        <Button
-            android:id="@+id/btnChUp"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:backgroundTint="#3A3530"
-            android:text="CH +"
-            android:textColor="#8A8378"
-            android:textSize="12sp" />
-
-    </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

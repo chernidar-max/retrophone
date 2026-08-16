@@ -93,13 +93,14 @@ class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
     @Volatile var collapseProgress = 0.0f
     @Volatile private var isCollapsing = false
     @Volatile private var collapseStartTime = 0L
-    private val collapseDuration = 550L
+    private val collapseDuration = 1300L
 
     // Анімація прогріву ламп (Warmup: шум -> картинка)
     @Volatile private var warmupProgress = 1.0f
     @Volatile private var isWarmingUp = false
     @Volatile private var warmupStartTime = 0L
-    private val warmupDuration = 1200L
+    private val warmupDuration = 3200L
+    private val snowOnlyPhase = 900L
 
     // Анімація переходу в чисте статичне фото без перешкод
     @Volatile private var effectsFade = 1.0f
@@ -144,11 +145,18 @@ class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
         // 2. Обробка прогріву ламп
         if (isWarmingUp) {
             val elapsed = SystemClock.uptimeMillis() - warmupStartTime
-            if (elapsed < 400L) {
+            if (elapsed < snowOnlyPhase) {
                 warmupProgress = 0.0f
             } else {
-                warmupProgress = ((elapsed - 400L).toFloat() / (warmupDuration - 400L)).coerceIn(0.0f, 1.0f)
-                if (warmupProgress >= 1.0f) isWarmingUp = false
+                val t = ((elapsed - snowOnlyPhase).toFloat() / (warmupDuration - snowOnlyPhase)).coerceIn(0.0f, 1.0f)
+                // easeInOutCubic — картинка проявляється повільно на початку і в кінці,
+                // а не рівномірно, це відчувається природніше для "прогріву" ЕПТ
+                warmupProgress = if (t < 0.5f) {
+                    4.0f * t * t * t
+                } else {
+                    1.0f - (-2.0f * t + 2.0f).let { it * it * it } / 2.0f
+                }
+                if (t >= 1.0f) isWarmingUp = false
             }
         }
 
@@ -214,7 +222,7 @@ class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
             isFadingToStatic = true
             fadeStartTime = SystemClock.uptimeMillis()
         }.also {
-            mainHandler.postDelayed(it, 1800L)
+            mainHandler.postDelayed(it, collapseDuration + 700L)
         }
     }
 
