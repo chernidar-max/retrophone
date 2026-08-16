@@ -263,6 +263,11 @@ class CrtRenderer(private val context: Context) : GLSurfaceView.Renderer {
         applyTexture(loadBitmapForTexture())
     }
 
+    /** Публічний доступ для MainActivity: коли Power вимикається, це саме зображення
+     *  (обране користувачем фото або заглушка за замовчуванням) встановлюється
+     *  як звичайне статичне системне тло замість живих шпалер. */
+    fun loadCurrentBackgroundBitmap(): Bitmap = loadBitmapForTexture()
+
     private fun loadBitmapForTexture(): Bitmap {
         val savedUriString = context
             .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

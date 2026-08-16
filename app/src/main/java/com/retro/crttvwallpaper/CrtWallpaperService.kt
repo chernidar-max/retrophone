@@ -2,10 +2,7 @@ package com.retro.crttvwallpaper
 
 import android.content.Context
 import android.opengl.GLSurfaceView
-import android.os.SystemClock
 import android.service.wallpaper.WallpaperService
-import android.util.Log
-import android.view.MotionEvent
 import android.view.SurfaceHolder
 
 class CrtWallpaperService : WallpaperService() {
@@ -17,13 +14,6 @@ class CrtWallpaperService : WallpaperService() {
     inner class CrtEngine : Engine() {
         private var glSurfaceView: WallpaperGLSurfaceView? = null
         private var renderer: CrtRenderer? = null
-        
-        // Надійний власний лічильник подвійного тапу (працює завжди на всіх лаунчерах Android 15)
-        private var lastTapTime = 0L
-        private var lastTapX = 0f
-        private var lastTapY = 0f
-        private val doubleTapTimeout = 400L
-        private val doubleTapSlopSquare = 120f * 120f
 
         override fun onCreate(surfaceHolder: SurfaceHolder) {
             super.onCreate(surfaceHolder)
@@ -34,50 +24,17 @@ class CrtWallpaperService : WallpaperService() {
                 setRenderer(renderer)
                 renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
             }
-
-            setTouchEventsEnabled(true)
         }
 
         override fun onVisibilityChanged(visible: Boolean) {
             super.onVisibilityChanged(visible)
             if (visible) {
                 glSurfaceView?.onResume()
+                // Ефект "прогріву ламп" (шум -> картинка) щоразу при поверненні
+                // до робочого столу — так само, як умикання справжнього телевізора.
                 renderer?.triggerTurnOn()
-                // Скидаємо лічильник подвійного тапу, щоб "старий" дотик з-перед
-                // блокування екрана не впливав на розпізнавання нового.
-                // ПРИМІТКА: раніше тут також повторно викликався setTouchEventsEnabled(true),
-                // але це спричиняло ANR — onVisibilityChanged сам іноді викликається системою
-                // під час активного Binder-рукостискання з WallpaperManagerService (наприклад,
-                // при натисканні "Встановити як шпалери"), і синхронний зворотний виклик у той
-                // самий сервіс під час цього рукостискання призводив до реентрантного дедлоку.
-                // setTouchEventsEnabled(true) достатньо викликати один раз, в onCreate.
-                lastTapTime = 0L
             } else {
                 glSurfaceView?.onPause()
-            }
-        }
-
-        override fun onTouchEvent(event: MotionEvent) {
-            super.onTouchEvent(event)
-            try {
-                if (event.action == MotionEvent.ACTION_DOWN) {
-                    val now = SystemClock.uptimeMillis()
-                    val dx = event.x - lastTapX
-                    val dy = event.y - lastTapY
-                    val distSq = dx * dx + dy * dy
-
-                    if (now - lastTapTime <= doubleTapTimeout && distSq <= doubleTapSlopSquare) {
-                        // Подвійний тап успішно розпізнано
-                        renderer?.toggleState()
-                        lastTapTime = 0L // Скидаємо, щоб не спрацьовувало тричі
-                    } else {
-                        lastTapTime = now
-                        lastTapX = event.x
-                        lastTapY = event.y
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e("CrtWallpaperService", "Помилка обробки дотику", e)
             }
         }
 
