@@ -2,6 +2,8 @@ package com.retro.crttvwallpaper
 
 import android.content.Context
 import android.opengl.GLSurfaceView
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.service.wallpaper.WallpaperService
 import android.util.Log
@@ -24,6 +26,8 @@ class CrtWallpaperService : WallpaperService() {
         private var lastTapY = 0f
         private val doubleTapTimeout = 400L
         private val doubleTapSlopSquare = 120f * 120f
+        private val engineHandler = Handler(Looper.getMainLooper())
+        private var reenableTouchRunnable: Runnable? = null
 
         override fun onCreate(surfaceHolder: SurfaceHolder) {
             super.onCreate(surfaceHolder)
@@ -43,15 +47,19 @@ class CrtWallpaperService : WallpaperService() {
             if (visible) {
                 glSurfaceView?.onResume()
                 renderer?.triggerTurnOn()
-                // Скидаємо лічильник подвійного тапу, щоб "старий" дотик з-перед
-                // блокування екрана не впливав на розпізнавання нового.
-                // ПРИМІТКА: раніше тут також повторно викликався setTouchEventsEnabled(true),
-                // але це спричиняло ANR — onVisibilityChanged сам іноді викликається системою
-                // під час активного Binder-рукостискання з WallpaperManagerService (наприклад,
-                // при натисканні "Встановити як шпалери"), і синхронний зворотний виклик у той
-                // самий сервіс під час цього рукостискання призводив до реентрантного дедлоку.
-                // setTouchEventsEnabled(true) достатньо викликати один раз, в onCreate.
                 lastTapTime = 0L
+
+                // Деякі прошивки (напр. HyperOS) "забувають" дозвіл на тач-події
+                // для шпалер після вимкнення/увімкнення екрана. Повторно
+                // підтверджуємо його — АЛЕ з невеликою затримкою через Handler,
+                // а не синхронно тут-таки: якщо викликати одразу, це може бути
+                // реентрантний виклик усередині того самого Binder-рукостискання
+                // з WallpaperManagerService (саме так раніше виникав ANR при
+                // натисканні "Встановити як шпалери"). Затримка розриває
+                // синхронний ланцюжок викликів.
+                reenableTouchRunnable?.let { engineHandler.removeCallbacks(it) }
+                reenableTouchRunnable = Runnable { setTouchEventsEnabled(true) }
+                engineHandler.postDelayed(reenableTouchRunnable!!, 250L)
             } else {
                 glSurfaceView?.onPause()
             }
@@ -87,6 +95,7 @@ class CrtWallpaperService : WallpaperService() {
 
         override fun onDestroy() {
             super.onDestroy()
+            reenableTouchRunnable?.let { engineHandler.removeCallbacks(it) }
             glSurfaceView?.onDestroy()
             glSurfaceView = null
         }
